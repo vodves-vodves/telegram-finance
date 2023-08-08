@@ -3,17 +3,27 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/joho/godotenv"
 	"telegram-finance/storage"
 )
 
 var keyboard = tgbotapi.InlineKeyboardMarkup{}
 
 func main() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	adminId, _ := strconv.ParseInt(os.Getenv("ADMIN_ID"), 10, 64)
+	token := os.Getenv("TOKEN")
+
 	db, err := storage.NewStorage("data/db.db")
 	if err != nil {
 		log.Println(err)
@@ -25,7 +35,7 @@ func main() {
 		return
 	}
 
-	bot, err := tgbotapi.NewBotAPI("6345585421:AAEA34EZ4_XD5hLcVKPeEPgLRs6oGApalEo")
+	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -55,22 +65,77 @@ func main() {
 						return
 					}
 				case "sum":
-					//todo сделать вывод общих трат
-					all, err := db.GetSum(update.Message.Chat.ID)
+					//todo добавить выбор месяца и года
+					year := time.Now().Year()
+					month := time.Now().Month()
+
+					all, err := db.GetSum(update.Message.Chat.ID, year, month)
 					if err != nil {
 						log.Println(err)
 						return
 					}
-
 					if len(all) > 0 {
+						msg.Text += fmt.Sprintf("Траты за %s\n", time.Now().Month().String())
 						for _, data := range all {
-							msg.Text += fmt.Sprintf("data: %+v\n", data)
+							msg.Text += fmt.Sprintf(" %s			%v 	%s\n", data.Category, data.Data, data.Date.Local().Format("02/01/2006 15:04:05"))
 						}
 					} else {
-						msg.Text += fmt.Sprintf("No data\n")
+						msg.Text += fmt.Sprintf("У вас еще нет записей за %s\n", month)
 					}
+				case "allsum":
+					all, err := db.AllSum(update.Message.Chat.ID)
+					if err != nil {
+						log.Println(err)
+						return
+					}
+					msg.Text += fmt.Sprintf("Общая сумма трат за все время: %v\n", all)
 				default:
-					msg.Text = "Не знаю такую команду"
+					msg.Text += "Такой команды нет"
+				}
+
+				//admin
+				if update.Message.Chat.ID == adminId {
+					msg.Text = ""
+					switch update.Message.Command() {
+					case "user":
+						spl := strings.Split(update.Message.Text, " ")
+						userId, _ := strconv.ParseInt(spl[1], 10, 64)
+						all, c, err := db.GetUserInfo(userId)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+						regDate := time.Unix(int64(all.RegDate), 0).Format("02/01/2006 15:04:05")
+						msg.Text += fmt.Sprintf("Информация о пользователе:\n\nИмя: @%v\nДата регистрации: %v\nКоличество записей: %v\n", all.UserName, regDate, c)
+					case "users":
+						all, err := db.GetUsers()
+						if err != nil {
+							log.Println(err)
+							return
+						}
+						msg.Text += fmt.Sprintf("Пользователи:\n\n")
+						for _, data := range all {
+							msg.Text += fmt.Sprintf("Имя: @%v\nUserID: %v\nДата регистрации: %v\n\n", data.UserName, data.UserId, time.Unix(int64(data.RegDate), 0).Format("02/01/2006 15:04:05"))
+						}
+					case "deluser":
+						spl := strings.Split(update.Message.Text, " ")
+						userId, _ := strconv.ParseInt(spl[1], 10, 64)
+						err := db.DeleteUser(userId)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+						msg.Text += fmt.Sprintf("Пользователь %v удален\n", userId)
+					case "deluserdata":
+						spl := strings.Split(update.Message.Text, " ")
+						userId, _ := strconv.ParseInt(spl[1], 10, 64)
+						err := db.DeleteUserData(userId)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+						msg.Text += fmt.Sprintf("Данные пользователя %v удалены\n", userId)
+					}
 				}
 
 				if _, err := bot.Send(msg); err != nil {
@@ -79,7 +144,6 @@ func main() {
 			}
 
 			//добавление расходов
-			//todo добавить ответ с кнопками после ввода числа, где идет выбор категорий
 			if num, ok := IsNumeric(update.Message.Text); ok {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Выберите категорию:")
 				keyboard = categoryKeyboard(num)
@@ -97,10 +161,11 @@ func main() {
 			} else {
 				spl := strings.Split(update.CallbackQuery.Data, ":")
 				num, _ := strconv.Atoi(spl[1]) //todo поменять на функцию
-				if err := db.SaveData(num, spl[0], "", update.CallbackQuery.Message.Date, update.CallbackQuery.Message.Chat.ID); err != nil {
+				if err := db.SaveData(num, spl[0], "", update.CallbackQuery.Message.Chat.ID); err != nil {
 					log.Println(err)
 					return
 				}
+
 				deleteMessageConfig := tgbotapi.DeleteMessageConfig{
 					ChatID:    update.CallbackQuery.Message.Chat.ID,
 					MessageID: update.CallbackQuery.Message.MessageID,
@@ -111,7 +176,8 @@ func main() {
 					return
 				}
 
-				msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, fmt.Sprintf("✅️ Внесено %v в %s \n🗓 %s", num, spl[0], time.Unix(int64(update.CallbackQuery.Message.Date), 0).Format("02/01/2006 15:04:05")))
+				mes := fmt.Sprintf("✅️ Внесено %v в %s \n🗓 %s", num, spl[0], time.Unix(int64(update.CallbackQuery.Message.Date), 0).Format("02/01/2006 15:04:05"))
+				msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, mes)
 				msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 					tgbotapi.NewInlineKeyboardRow(
 						tgbotapi.NewInlineKeyboardButtonData("Добавить комментарий", "comment"),
