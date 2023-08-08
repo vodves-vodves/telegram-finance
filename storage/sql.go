@@ -30,11 +30,6 @@ func NewStorage(path string) (*Db, error) {
 }
 
 func (d *Db) Init() error {
-	//qUsers := `CREATE TABLE IF NOT EXISTS users (userID INTEGER PRIMARY KEY, userName TEXT, regDate INTEGER)`
-	//_, err := d.db.Exec(qUsers)
-	//if err != nil {
-	//	return fmt.Errorf("error create table users: %w", err)
-	//}
 	qData := `CREATE TABLE IF NOT EXISTS users (userID INTEGER PRIMARY KEY, userName TEXT, regDate INTEGER);
 CREATE TABLE IF NOT EXISTS data (dataID INTEGER PRIMARY KEY AUTOINCREMENT, data INTEGER, category TEXT, comment TEXT, date INTEGER, user_id INTEGER, FOREIGN KEY (user_id)  REFERENCES users (userID));`
 	_, err := d.db.Exec(qData)
@@ -50,8 +45,6 @@ func (d *Db) SaveUser(userId int64, regDate int, userName string) error {
 	if err != nil {
 		return fmt.Errorf("error save user: %w", err)
 	}
-	//i, _ := res.LastInsertId()
-	//log.Printf("User %s is saved %v", userName, i)
 	return nil
 }
 
