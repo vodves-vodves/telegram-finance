@@ -80,3 +80,16 @@ func (d *Db) GetSum(userId int64) ([]UserDatas, error) {
 func (d *Db) CloseDB() {
 	d.db.Close()
 }
+
+func (d *Db) GetUsers() error {
+	return nil
+}
+
+func (d *Db) GetUserInfo() error {
+	//todo вывод дату регистрации и количество транзакций
+	return nil
+}
+
+func (d *Db) DeleteUserData(userId int64) error {
+	return nil
+}
