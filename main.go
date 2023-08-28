@@ -8,15 +8,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// var (
-//
-//	mainKeyboard = tgbotapi.NewReplyKeyboard(
-//		tgbotapi.NewKeyboardButtonRow(
-//			tgbotapi.NewKeyboardButton("Отчеты"),
-//			tgbotapi.NewKeyboardButton("Долги"),
-//		))
-//
-// )
 var db *Db
 
 func main() {
