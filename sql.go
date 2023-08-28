@@ -1,4 +1,4 @@
-package storage
+package main
 
 import (
 	"database/sql"
@@ -41,9 +41,17 @@ func (d *Db) Init() error {
               CREATE TABLE IF NOT EXISTS data (dataID INTEGER PRIMARY KEY AUTOINCREMENT, 
 												data INTEGER, 
 												category TEXT, 
-												comment TEXT, 
+												comment TEXT NOT NULL , 
 												timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
-												user_id INTEGER, 
+												user_id INTEGER NOT NULL, 
+												FOREIGN KEY (user_id)  REFERENCES users (userID));
+			  CREATE TABLE IF NOT EXISTS credits (creditID INTEGER PRIMARY KEY AUTOINCREMENT, 
+												data INTEGER,
+												from_id INTEGER NOT NULL ,
+												comment TEXT NOT NULL , 
+												active INTEGER NOT NULL ,
+												timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+												user_id INTEGER NOT NULL, 
 												FOREIGN KEY (user_id)  REFERENCES users (userID));`
 	_, err := d.db.Exec(qData)
 	if err != nil {
@@ -61,12 +69,25 @@ func (d *Db) SaveUser(userId int64, regDate int, userName string) error {
 	return nil
 }
 
-func (d *Db) SaveData(data int, category, comment string, userId int64) error {
+func (d *Db) SaveData(data int, category string, userId int64) (int64, error) {
 	q := `PRAGMA foreign_keys = ON;
-		  INSERT INTO data (data, category, comment, user_id) VALUES (?, ?, ?, ?);`
-	_, err := d.db.Exec(q, data, category, comment, userId)
+		  INSERT INTO data (data, category,comment, user_id) VALUES (?, ?, ?, ?);`
+	res, err := d.db.Exec(q, data, category, "", userId)
 	if err != nil {
-		return fmt.Errorf("error save data: %w", err)
+		return 0, fmt.Errorf("error save data: %w", err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("error get last id data: %w", err)
+	}
+	return id, nil
+}
+
+func (d *Db) setComment(comment string, dataID int64) error {
+	q := `UPDATE data SET comment = ? WHERE dataID = ?`
+	_, err := d.db.Exec(q, comment, dataID)
+	if err != nil {
+		return fmt.Errorf("error edit comment data: %w", err)
 	}
 	return nil
 }
@@ -167,9 +188,18 @@ func (d *Db) GetUserInfo(userId int64) (Users, int, error) {
 	return user, count, nil
 }
 
-func (d *Db) DeleteUserData(userId int64) error {
+func (d *Db) DeleteAllUserData(userId int64) error {
 	q := `DELETE FROM data WHERE user_id=?`
 	_, err := d.db.Exec(q, userId)
+	if err != nil {
+		return fmt.Errorf("error delete all user data: %w", err)
+	}
+	return nil
+}
+
+func (d *Db) DeleteUserData(recordId int64) error {
+	q := `DELETE FROM data WHERE dataID=?`
+	_, err := d.db.Exec(q, recordId)
 	if err != nil {
 		return fmt.Errorf("error delete user data: %w", err)
 	}
