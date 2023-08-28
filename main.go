@@ -8,6 +8,17 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// var (
+//
+//	mainKeyboard = tgbotapi.NewReplyKeyboard(
+//		tgbotapi.NewKeyboardButtonRow(
+//			tgbotapi.NewKeyboardButton("Отчеты"),
+//			tgbotapi.NewKeyboardButton("Долги"),
+//		))
+//
+// )
+var db *Db
+
 func main() {
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -15,7 +26,7 @@ func main() {
 		return
 	}
 	token := os.Getenv("TOKEN")
-	db, err := NewStorage("data/db.db")
+	db, err = NewStorage("data/db.db")
 	if err != nil {
 		log.Println(err)
 		return
