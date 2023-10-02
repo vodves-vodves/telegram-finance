@@ -13,10 +13,14 @@ import (
 
 type stateFn func(*echotron.Update) stateFn
 
+//todo
+
 type bot struct {
 	chatID   int64
 	amount   int
 	recordId int64
+	year     int
+	month    time.Month
 	state    stateFn
 	echotron.API
 }
@@ -55,29 +59,88 @@ func (b *bot) handleMessage(update *echotron.Update) stateFn {
 	switch {
 	case msgText == "/start":
 		b.startUser(userName, msgDate)
-		//todo добавить
-	//case messageText == "/get":
-	//	b.sendExpences(userID)
-	//case messageText == "/chart":
-	//	b.sendChart(userID)
-	//case addCommandPattern.MatchString(messageText):
-	//	b.addExpence(messageText, userID)
 	case strings.HasSuffix(msgText, "Отчеты"):
 		b.reports()
+	case strings.HasSuffix(msgText, "Расходы за определенный месяц"):
+		b.getYear()
 	case strings.HasSuffix(msgText, "Расходы за текущий месяц"):
-		b.userMonthStats()
+		b.userMonthStats(time.Now().Year(), time.Now().Month())
 	case strings.HasSuffix(msgText, "Потрачено за все время"):
 		b.userAllStats()
 	case strings.HasSuffix(msgText, "Долги"):
+		b.credits()
+	case strings.HasSuffix(msgText, "Выставить счет"):
+	case strings.HasSuffix(msgText, "Мои долги"):
 	case strings.HasSuffix(msgText, "Главное меню"):
-		b.mainMenu()
+		b.mainMenu(userName)
 	case strings.HasSuffix(msgText, "Настройки"):
+		b.settings()
 
 	}
 	if num, ok := isNumeric(update.Message.Text); ok {
 		b.addAmount(num)
 	}
 	return b.startBot
+}
+
+func (b *bot) handleCallbackQuery(c *echotron.CallbackQuery) stateFn {
+	switch {
+	case strings.HasPrefix(c.Data, "comment"):
+		st := b.setComment(c)
+		return st
+	case strings.HasPrefix(c.Data, "delRecord"):
+		recordId, _ := strconv.ParseInt(strings.Split(c.Data, ":")[1], 10, 64)
+		b.deleteRecord(recordId, c.Message.ID)
+	case c.Data == "cancelCategories":
+		b.cancelCategories(c)
+	case strings.HasPrefix(c.Data, "year"):
+		st := b.setYear(c)
+		return st
+	case strings.HasPrefix(c.Data, "month"):
+		b.setMonth(c)
+	default:
+		b.setCategory(c)
+	}
+	return b.startBot
+}
+
+// выбор года для отчета
+func (b *bot) getYear() {
+	msg := "Выберите год:"
+
+	opt := echotron.MessageOptions{
+		ReplyMarkup: yearsButtons(),
+	}
+	message, err := b.SendMessage(msg, b.chatID, &opt)
+	if err != nil {
+		log.Println(message, err)
+	}
+}
+
+// выбор месяца для отчета
+func (b *bot) setYear(c *echotron.CallbackQuery) stateFn {
+	year, _ := isNumeric(strings.Split(c.Data, ":")[1])
+	b.year = year
+
+	msg := "Выберите месяц:"
+
+	message := echotron.NewMessageID(b.chatID, c.Message.ID)
+	_, err := b.EditMessageText(msg, message, &echotron.MessageTextOptions{
+		ReplyMarkup: monthButtons(),
+	})
+	if err != nil {
+		log.Println(err)
+	}
+	defer b.AnswerCallbackQuery(c.ID, nil)
+	return b.startBot
+}
+
+func (b *bot) setMonth(c *echotron.CallbackQuery) {
+	month, _ := strconv.ParseInt(strings.Split(c.Data, ":")[1], 10, 64)
+	b.month = time.Month(month)
+	b.DeleteMessage(b.chatID, c.Message.ID)
+	defer b.AnswerCallbackQuery(c.ID, nil)
+	b.userMonthStats(b.year, b.month)
 }
 
 func (b *bot) startUser(userName string, msgDate int) stateFn {
@@ -97,7 +160,8 @@ func (b *bot) startUser(userName string, msgDate int) stateFn {
 	return b.startBot
 }
 
-func (b *bot) mainMenu() {
+func (b *bot) mainMenu(userName string) {
+
 	msg := "Отправь число для начала учета твоих финансов"
 
 	opt := echotron.MessageOptions{
@@ -107,7 +171,6 @@ func (b *bot) mainMenu() {
 	if err != nil {
 		fmt.Println(message, err)
 	}
-	//return b.startBot
 }
 
 func (b *bot) addAmount(amount int) {
@@ -121,22 +184,6 @@ func (b *bot) addAmount(amount int) {
 	if err != nil {
 		log.Println(message, err)
 	}
-}
-
-func (b *bot) handleCallbackQuery(c *echotron.CallbackQuery) stateFn {
-	switch {
-	case strings.HasPrefix(c.Data, "comment"):
-		st := b.setComment(c)
-		return st
-	case strings.HasPrefix(c.Data, "delRecord"):
-		recordId, _ := strconv.ParseInt(strings.Split(c.Data, ":")[1], 10, 64)
-		b.deleteRecord(recordId, c.Message.ID)
-	case c.Data == "cancelCategories":
-		b.cancelCategories(c)
-	default:
-		b.setCategory(c)
-	}
-	return b.startBot
 }
 
 func (b *bot) setCategory(c *echotron.CallbackQuery) {
@@ -207,11 +254,8 @@ func (b *bot) cancelCategories(c *echotron.CallbackQuery) {
 	}
 }
 
-func (b *bot) userMonthStats() {
-	//todo сделать выбор года и месяца
+func (b *bot) userMonthStats(year int, month time.Month) {
 	var msg string
-	year := time.Now().Year()
-	month := time.Now().Month()
 
 	all, err := db.GetSum(b.chatID, year, month)
 	if err != nil {
@@ -224,7 +268,7 @@ func (b *bot) userMonthStats() {
 			msg += fmt.Sprintf("%v.  %s %v руб - %s - %s\n", i+1, data.Category, data.Data, data.Comment, data.Date.Local().Format("02/01/2006 15:04:05"))
 		}
 	} else {
-		msg = fmt.Sprintf("У вас еще нет записей за %s\n", month)
+		msg = fmt.Sprintf("У вас нет записей за %s %v\n", month, year)
 	}
 
 	message, err := b.SendMessage(msg, b.chatID, nil)
@@ -253,7 +297,30 @@ func (b *bot) reports() {
 	opt := echotron.MessageOptions{
 		ReplyMarkup: reportButtons(),
 	}
-	//b.SendMessage("Вам выставлен счет: 5 000 000 руб", 459455590, nil)
+	message, err := b.SendMessage(msg, b.chatID, &opt)
+	if err != nil {
+		log.Println(message, err)
+	}
+}
+
+func (b *bot) credits() {
+	msg := "Выберите действие:"
+
+	opt := echotron.MessageOptions{
+		ReplyMarkup: creditButtons(),
+	}
+	message, err := b.SendMessage(msg, b.chatID, &opt)
+	if err != nil {
+		log.Println(message, err)
+	}
+}
+
+func (b *bot) settings() {
+	msg := "Выберите действие:"
+
+	opt := echotron.MessageOptions{
+		ReplyMarkup: settingsButtons(),
+	}
 	message, err := b.SendMessage(msg, b.chatID, &opt)
 	if err != nil {
 		log.Println(message, err)
@@ -283,8 +350,7 @@ func reportButtons() echotron.ReplyKeyboardMarkup {
 				{Text: "💰 Потрачено за все время"},
 			},
 			{
-				{Text: "💰 Удалить запись"},
-				{Text: "💰 Изменить комментарий"},
+				{Text: "💰 Расходы за определенный месяц"},
 			},
 			{
 				{Text: "⬅️ Главное меню"},
@@ -298,7 +364,10 @@ func creditButtons() echotron.ReplyKeyboardMarkup {
 	return echotron.ReplyKeyboardMarkup{
 		Keyboard: [][]echotron.KeyboardButton{
 			{
-				{Text: "💰 Выставить счет"},
+				{Text: "💰 Выставить долг"},
+			},
+			{
+				{Text: "💰 Я должен"},
 				{Text: "💰 Мои долги"},
 			},
 			{
@@ -317,6 +386,56 @@ func settingsButtons() echotron.InlineKeyboardMarkup {
 			},
 			{
 				{Text: "Напоминание о долгах (вкл/выкл)", CallbackData: "remidnerDolg"},
+			},
+		},
+	}
+}
+
+func yearsButtons() echotron.InlineKeyboardMarkup {
+	nowYear := fmt.Sprintf("%v", time.Now().Year())
+	lastYear := fmt.Sprintf("%v", time.Now().Year()-1)
+	lastLastYear := fmt.Sprintf("%v", time.Now().Year()-2)
+	return echotron.InlineKeyboardMarkup{
+		InlineKeyboard: [][]echotron.InlineKeyboardButton{
+			{
+				{Text: nowYear, CallbackData: "year:" + nowYear},
+			},
+			{
+				{Text: lastYear, CallbackData: "year:" + lastYear},
+			},
+			{
+				{Text: lastLastYear, CallbackData: "year:" + lastLastYear},
+			},
+		},
+	}
+}
+
+func monthButtons() echotron.InlineKeyboardMarkup {
+	return echotron.InlineKeyboardMarkup{
+		InlineKeyboard: [][]echotron.InlineKeyboardButton{
+			{
+				{Text: time.January.String(), CallbackData: fmt.Sprintf("month:%v", 1)},
+				{Text: time.February.String(), CallbackData: fmt.Sprintf("month:%v", 2)},
+			},
+			{
+				{Text: time.March.String(), CallbackData: fmt.Sprintf("month:%v", 3)},
+				{Text: time.April.String(), CallbackData: fmt.Sprintf("month:%v", 4)},
+			},
+			{
+				{Text: time.May.String(), CallbackData: fmt.Sprintf("month:%v", 5)},
+				{Text: time.June.String(), CallbackData: fmt.Sprintf("month:%v", 6)},
+			},
+			{
+				{Text: time.July.String(), CallbackData: fmt.Sprintf("month:%v", 7)},
+				{Text: time.August.String(), CallbackData: fmt.Sprintf("month:%v", 8)},
+			},
+			{
+				{Text: time.September.String(), CallbackData: fmt.Sprintf("month:%v", 9)},
+				{Text: time.October.String(), CallbackData: fmt.Sprintf("month:%v", 10)},
+			},
+			{
+				{Text: time.November.String(), CallbackData: fmt.Sprintf("month:%v", 11)},
+				{Text: time.December.String(), CallbackData: fmt.Sprintf("month:%v", 12)},
 			},
 		},
 	}
