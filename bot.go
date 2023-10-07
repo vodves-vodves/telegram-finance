@@ -13,8 +13,6 @@ import (
 
 type stateFn func(*echotron.Update) stateFn
 
-//todo
-
 type bot struct {
 	chatID   int64
 	amount   int
@@ -69,8 +67,9 @@ func (b *bot) handleMessage(update *echotron.Update) stateFn {
 		b.userAllStats()
 	case strings.HasSuffix(msgText, "Долги"):
 		b.credits()
-	case strings.HasSuffix(msgText, "Выставить счет"):
-	case strings.HasSuffix(msgText, "Мои долги"):
+	case strings.HasSuffix(msgText, "Выставить долг"):
+	case strings.HasSuffix(msgText, "Мне должны"):
+	case strings.HasSuffix(msgText, "Я должен"):
 	case strings.HasSuffix(msgText, "Главное меню"):
 		b.mainMenu(userName)
 	case strings.HasSuffix(msgText, "Настройки"):
@@ -157,6 +156,7 @@ func (b *bot) startUser(userName string, msgDate int) stateFn {
 	if err != nil {
 		fmt.Println(message, err)
 	}
+	b.SetMyCommands(nil, echotron.BotCommand{Command: "start", Description: "старт бота"})
 	return b.startBot
 }
 
@@ -255,7 +255,10 @@ func (b *bot) cancelCategories(c *echotron.CallbackQuery) {
 }
 
 func (b *bot) userMonthStats(year int, month time.Month) {
-	var msg string
+	var (
+		msg string
+		sum int
+	)
 
 	all, err := db.GetSum(b.chatID, year, month)
 	if err != nil {
@@ -263,14 +266,15 @@ func (b *bot) userMonthStats(year int, month time.Month) {
 		return
 	}
 	if len(all) > 0 {
-		msg += fmt.Sprintf("Траты за %s\n", time.Now().Month().String())
+		msg += fmt.Sprintf("Траты за %s\n\n", time.Now().Month().String())
 		for i, data := range all {
-			msg += fmt.Sprintf("%v.  %s %v руб - %s - %s\n", i+1, data.Category, data.Data, data.Comment, data.Date.Local().Format("02/01/2006 15:04:05"))
+			msg += fmt.Sprintf("%v.    %s %v руб - %s - %s\n", i+1, data.Category, data.Data, data.Comment, data.Date.Local().Format("02/01/2006 15:04:05"))
+			sum += data.Data
 		}
+		msg += fmt.Sprintf("\nИтого: %v руб\n", sum)
 	} else {
 		msg = fmt.Sprintf("У вас нет записей за %s %v\n", month, year)
 	}
-
 	message, err := b.SendMessage(msg, b.chatID, nil)
 	if err != nil {
 		log.Println(message, err)
@@ -368,7 +372,7 @@ func creditButtons() echotron.ReplyKeyboardMarkup {
 			},
 			{
 				{Text: "💰 Я должен"},
-				{Text: "💰 Мои долги"},
+				{Text: "💰 Мне должны"},
 			},
 			{
 				{Text: "⬅️ Главное меню"},
@@ -395,6 +399,8 @@ func yearsButtons() echotron.InlineKeyboardMarkup {
 	nowYear := fmt.Sprintf("%v", time.Now().Year())
 	lastYear := fmt.Sprintf("%v", time.Now().Year()-1)
 	lastLastYear := fmt.Sprintf("%v", time.Now().Year()-2)
+	lastLastYear2 := fmt.Sprintf("%v", time.Now().Year()-3)
+	lastLastYear3 := fmt.Sprintf("%v", time.Now().Year()-4)
 	return echotron.InlineKeyboardMarkup{
 		InlineKeyboard: [][]echotron.InlineKeyboardButton{
 			{
@@ -405,6 +411,12 @@ func yearsButtons() echotron.InlineKeyboardMarkup {
 			},
 			{
 				{Text: lastLastYear, CallbackData: "year:" + lastLastYear},
+			},
+			{
+				{Text: lastLastYear2, CallbackData: "year:" + lastLastYear2},
+			},
+			{
+				{Text: lastLastYear3, CallbackData: "year:" + lastLastYear3},
 			},
 		},
 	}
