@@ -1,4 +1,4 @@
-package main
+package bot
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NicoNex/echotron/v3"
+	"telegram-finance/sql"
 )
 
 type stateFn func(*echotron.Update) stateFn
@@ -18,15 +19,25 @@ type bot struct {
 	amount   int
 	recordId int64
 	year     int
+	db       sql.Db
 	month    time.Month
 	state    stateFn
 	echotron.API
 }
 
-func Newbot(chatID int64) echotron.Bot {
+func NewBot(chatID int64) echotron.Bot {
 	token := os.Getenv("TOKEN")
+	db, err := sql.NewStorage("data/db.db")
+	if err != nil {
+		log.Println(err)
+	}
+
+	if err := db.Init(); err != nil {
+		log.Println(err)
+	}
 	bot := &bot{
 		chatID: chatID,
+		db:     *db,
 		API:    echotron.NewAPI(token),
 	}
 	bot.state = bot.startBot
@@ -143,7 +154,7 @@ func (b *bot) setMonth(c *echotron.CallbackQuery) {
 }
 
 func (b *bot) startUser(userName string, msgDate int) stateFn {
-	if err := db.SaveUser(b.chatID, msgDate, userName); err != nil {
+	if err := b.db.SaveUser(b.chatID, msgDate, userName); err != nil {
 		log.Println(userName, err)
 	}
 
@@ -187,7 +198,7 @@ func (b *bot) addAmount(amount int) {
 }
 
 func (b *bot) setCategory(c *echotron.CallbackQuery) {
-	id, err := db.SaveData(b.amount, c.Data, b.chatID)
+	id, err := b.db.SaveData(b.amount, c.Data, b.chatID)
 	if err != nil {
 		log.Println(c.From.Username, err)
 		return
@@ -217,7 +228,7 @@ func (b *bot) setComment(c *echotron.CallbackQuery) stateFn {
 
 func (b *bot) getComment(update *echotron.Update) stateFn {
 	comment := update.Message.Text
-	err := db.setComment(comment, b.recordId)
+	err := b.db.SetComment(comment, b.recordId)
 	if err != nil {
 		log.Println(update.Message.From.Username, err)
 		return b.startBot
@@ -232,7 +243,7 @@ func (b *bot) getComment(update *echotron.Update) stateFn {
 }
 
 func (b *bot) deleteRecord(recordId int64, messageId int) {
-	err := db.DeleteUserData(recordId)
+	err := b.db.DeleteUserData(recordId)
 	if err != nil {
 		log.Println(err)
 		return
@@ -260,7 +271,7 @@ func (b *bot) userMonthStats(year int, month time.Month) {
 		sum int
 	)
 
-	all, err := db.GetSum(b.chatID, year, month)
+	all, err := b.db.GetSum(b.chatID, year, month)
 	if err != nil {
 		log.Println(err)
 		return
@@ -282,7 +293,7 @@ func (b *bot) userMonthStats(year int, month time.Month) {
 }
 
 func (b *bot) userAllStats() {
-	all, err := db.AllSum(b.chatID)
+	all, err := b.db.AllSum(b.chatID)
 	if err != nil {
 		log.Println(err)
 		return
@@ -329,177 +340,4 @@ func (b *bot) settings() {
 	if err != nil {
 		log.Println(message, err)
 	}
-}
-
-func mainButtons() echotron.ReplyKeyboardMarkup {
-	return echotron.ReplyKeyboardMarkup{
-		Keyboard: [][]echotron.KeyboardButton{
-			{
-				{Text: "📄 Отчеты"},
-				{Text: "💰 Долги"}, //credit
-			},
-			{
-				{Text: "⚙️ Настройки"},
-			},
-		},
-		ResizeKeyboard: true,
-	}
-}
-
-func reportButtons() echotron.ReplyKeyboardMarkup {
-	return echotron.ReplyKeyboardMarkup{
-		Keyboard: [][]echotron.KeyboardButton{
-			{
-				{Text: "💰 Расходы за текущий месяц"},
-				{Text: "💰 Потрачено за все время"},
-			},
-			{
-				{Text: "💰 Расходы за определенный месяц"},
-			},
-			{
-				{Text: "⬅️ Главное меню"},
-			},
-		},
-		ResizeKeyboard: true,
-	}
-}
-
-func creditButtons() echotron.ReplyKeyboardMarkup {
-	return echotron.ReplyKeyboardMarkup{
-		Keyboard: [][]echotron.KeyboardButton{
-			{
-				{Text: "💰 Выставить долг"},
-			},
-			{
-				{Text: "💰 Я должен"},
-				{Text: "💰 Мне должны"},
-			},
-			{
-				{Text: "⬅️ Главное меню"},
-			},
-		},
-		ResizeKeyboard: true,
-	}
-}
-
-func settingsButtons() echotron.InlineKeyboardMarkup {
-	return echotron.InlineKeyboardMarkup{
-		InlineKeyboard: [][]echotron.InlineKeyboardButton{
-			{
-				{Text: "Напоминание учета расходов (вкл/выкл)", CallbackData: "reminder"},
-			},
-			{
-				{Text: "Напоминание о долгах (вкл/выкл)", CallbackData: "remidnerDolg"},
-			},
-		},
-	}
-}
-
-func yearsButtons() echotron.InlineKeyboardMarkup {
-	nowYear := fmt.Sprintf("%v", time.Now().Year())
-	lastYear := fmt.Sprintf("%v", time.Now().Year()-1)
-	lastLastYear := fmt.Sprintf("%v", time.Now().Year()-2)
-	lastLastYear2 := fmt.Sprintf("%v", time.Now().Year()-3)
-	lastLastYear3 := fmt.Sprintf("%v", time.Now().Year()-4)
-	return echotron.InlineKeyboardMarkup{
-		InlineKeyboard: [][]echotron.InlineKeyboardButton{
-			{
-				{Text: nowYear, CallbackData: "year:" + nowYear},
-			},
-			{
-				{Text: lastYear, CallbackData: "year:" + lastYear},
-			},
-			{
-				{Text: lastLastYear, CallbackData: "year:" + lastLastYear},
-			},
-			{
-				{Text: lastLastYear2, CallbackData: "year:" + lastLastYear2},
-			},
-			{
-				{Text: lastLastYear3, CallbackData: "year:" + lastLastYear3},
-			},
-		},
-	}
-}
-
-func monthButtons() echotron.InlineKeyboardMarkup {
-	return echotron.InlineKeyboardMarkup{
-		InlineKeyboard: [][]echotron.InlineKeyboardButton{
-			{
-				{Text: time.January.String(), CallbackData: fmt.Sprintf("month:%v", 1)},
-				{Text: time.February.String(), CallbackData: fmt.Sprintf("month:%v", 2)},
-			},
-			{
-				{Text: time.March.String(), CallbackData: fmt.Sprintf("month:%v", 3)},
-				{Text: time.April.String(), CallbackData: fmt.Sprintf("month:%v", 4)},
-			},
-			{
-				{Text: time.May.String(), CallbackData: fmt.Sprintf("month:%v", 5)},
-				{Text: time.June.String(), CallbackData: fmt.Sprintf("month:%v", 6)},
-			},
-			{
-				{Text: time.July.String(), CallbackData: fmt.Sprintf("month:%v", 7)},
-				{Text: time.August.String(), CallbackData: fmt.Sprintf("month:%v", 8)},
-			},
-			{
-				{Text: time.September.String(), CallbackData: fmt.Sprintf("month:%v", 9)},
-				{Text: time.October.String(), CallbackData: fmt.Sprintf("month:%v", 10)},
-			},
-			{
-				{Text: time.November.String(), CallbackData: fmt.Sprintf("month:%v", 11)},
-				{Text: time.December.String(), CallbackData: fmt.Sprintf("month:%v", 12)},
-			},
-		},
-	}
-}
-
-func categoriesButtons() echotron.InlineKeyboardMarkup {
-	return echotron.InlineKeyboardMarkup{
-		InlineKeyboard: [][]echotron.InlineKeyboardButton{
-			{
-				{Text: "🍔Еда вне дома", CallbackData: "🍔Еда вне дома"},
-				{Text: "🛒Продукты", CallbackData: "🛒Продукты"},
-			},
-			{
-				{Text: "🏡Дом", CallbackData: "🏡Дом"},
-				{Text: "🚙Машина", CallbackData: "🚙Машина"},
-			},
-			{
-				{Text: "💊Здоровье", CallbackData: "💊Дом"},
-				{Text: "🧙Личное", CallbackData: "🧙Личное"},
-			},
-			{
-				{Text: "👕Одежда/товары", CallbackData: "👕Одежда/товары"},
-				{Text: "🌐Интернет/связь", CallbackData: "🌐Интернет/связь"},
-			},
-			{
-				{Text: "🎢Развлечения", CallbackData: "🎢Развлечения"},
-				{Text: "🌎Прочие", CallbackData: "🌎Прочие"},
-			},
-			{
-				{Text: "❌Отмена", CallbackData: "cancelCategories"},
-			},
-		},
-	}
-}
-
-func recordButtons(id int64) echotron.InlineKeyboardMarkup {
-	return echotron.InlineKeyboardMarkup{
-		InlineKeyboard: [][]echotron.InlineKeyboardButton{
-			{
-				{Text: "⏬ Добавить комментарий", CallbackData: fmt.Sprintf("comment:%v", id)},
-			},
-			{
-				{Text: "❌ Удалить", CallbackData: fmt.Sprintf("delRecord:%v", id)},
-			},
-		},
-	}
-}
-
-func isNumeric(s string) (int, bool) {
-	i, err := strconv.Atoi(s)
-	if err == nil {
-		return i, true
-	}
-	return 0, false
 }

@@ -1,4 +1,4 @@
-package main
+package sql
 
 import (
 	"database/sql"
@@ -83,7 +83,7 @@ func (d *Db) SaveData(data int, category string, userId int64) (int64, error) {
 	return id, nil
 }
 
-func (d *Db) setComment(comment string, dataID int64) error {
+func (d *Db) SetComment(comment string, dataID int64) error {
 	q := `UPDATE data SET comment = ? WHERE dataID = ?`
 	_, err := d.db.Exec(q, comment, dataID)
 	if err != nil {
