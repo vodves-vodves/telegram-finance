@@ -4,12 +4,17 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/NicoNex/echotron/v3"
 	"telegram-finance/sql"
+)
+
+const (
+	markdownV2 = "MarkdownV2"
 )
 
 type stateFn func(*echotron.Update) stateFn
@@ -70,6 +75,9 @@ func (b *bot) handleMessage(update *echotron.Update) stateFn {
 		b.startUser(userName, msgDate)
 	case strings.HasSuffix(msgText, "Отчеты"):
 		b.reports()
+	//Расходы по категориям
+	case strings.HasSuffix(msgText, "Расходы по категориям"):
+		b.userMonthStatsCategory(time.Now().Year(), time.Now().Month())
 	case strings.HasSuffix(msgText, "Расходы за определенный месяц"):
 		b.getYear()
 	case strings.HasSuffix(msgText, "Расходы за текущий месяц"):
@@ -277,16 +285,58 @@ func (b *bot) userMonthStats(year int, month time.Month) {
 		return
 	}
 	if len(all) > 0 {
-		msg += fmt.Sprintf("Траты за %s\n\n", time.Now().Month().String())
+		msg += fmt.Sprintf("``` Траты за %s\n\n", time.Now().Month().String())
 		for i, data := range all {
-			msg += fmt.Sprintf("%v.    %s %v руб - %s - %s\n", i+1, data.Category, data.Data, data.Comment, data.Date.Local().Format("02/01/2006 15:04:05"))
+			msg += fmt.Sprintf("%v\\. %s | %s | %v руб | %s\n", i+1, data.Date.Local().Format("02/01/2006"), data.Category, data.Data, data.Comment)
 			sum += data.Data
 		}
-		msg += fmt.Sprintf("\nИтого: %v руб\n", sum)
+		msg += fmt.Sprintf("\nИтого\\: %v руб```\n", sum)
 	} else {
 		msg = fmt.Sprintf("У вас нет записей за %s %v\n", month, year)
 	}
-	message, err := b.SendMessage(msg, b.chatID, nil)
+	opt := echotron.MessageOptions{
+		ParseMode: markdownV2,
+	}
+	message, err := b.SendMessage(msg, b.chatID, &opt)
+	if err != nil {
+		log.Println(message, err)
+	}
+}
+
+func (b *bot) userMonthStatsCategory(year int, month time.Month) {
+	var (
+		msg string
+	)
+
+	categories := make(map[string]int)
+
+	all, err := b.db.GetSum(b.chatID, year, month)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	if len(all) > 0 {
+		msg += fmt.Sprintf("``` Траты за %s по категориям\n\n", time.Now().Month().String())
+		for _, data := range all {
+			categories[data.Category] += data.Data
+		}
+		keys := make([]string, 0, len(categories))
+		for key := range categories {
+			keys = append(keys, key)
+		}
+		sort.Slice(keys, func(i, j int) bool { return categories[keys[i]] > categories[keys[j]] })
+		for _, key := range keys {
+			msg += fmt.Sprintf("%s | %v руб \n", key, categories[key])
+		}
+
+		msg += fmt.Sprintf("```\n")
+	} else {
+		msg = fmt.Sprintf("У вас нет записей за %s %v\n", month, year)
+	}
+	opt := echotron.MessageOptions{
+		ParseMode: markdownV2,
+	}
+	message, err := b.SendMessage(msg, b.chatID, &opt)
 	if err != nil {
 		log.Println(message, err)
 	}
