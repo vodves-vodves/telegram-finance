@@ -20,13 +20,14 @@ const (
 type stateFn func(*echotron.Update) stateFn
 
 type bot struct {
-	chatID   int64
-	amount   int
-	recordId int64
-	year     int
-	db       sql.Db
-	month    time.Month
-	state    stateFn
+	chatID    int64
+	amount    int
+	recordId  int64
+	year      int
+	categoryB bool
+	db        sql.Db
+	month     time.Month
+	state     stateFn
 	echotron.API
 }
 
@@ -78,7 +79,10 @@ func (b *bot) handleMessage(update *echotron.Update) stateFn {
 	//Расходы по категориям
 	case strings.HasSuffix(msgText, "Расходы по категориям"):
 		b.userMonthStatsCategory(time.Now().Year(), time.Now().Month())
-	case strings.HasSuffix(msgText, "Расходы за определенный месяц"):
+	case strings.HasSuffix(msgText, "Расходы по категориям за опр. месяц"):
+		b.categoryB = true
+		b.getYear()
+	case strings.HasSuffix(msgText, "Расходы за опр. месяц"):
 		b.getYear()
 	case strings.HasSuffix(msgText, "Расходы за текущий месяц"):
 		b.userMonthStats(time.Now().Year(), time.Now().Month())
@@ -116,6 +120,12 @@ func (b *bot) handleCallbackQuery(c *echotron.CallbackQuery) stateFn {
 		return st
 	case strings.HasPrefix(c.Data, "month"):
 		b.setMonth(c)
+		if b.categoryB {
+			b.userMonthStatsCategory(b.year, b.month)
+			b.categoryB = false
+			break
+		}
+		b.userMonthStats(b.year, b.month)
 	default:
 		b.setCategory(c)
 	}
@@ -158,7 +168,7 @@ func (b *bot) setMonth(c *echotron.CallbackQuery) {
 	b.month = time.Month(month)
 	b.DeleteMessage(b.chatID, c.Message.ID)
 	defer b.AnswerCallbackQuery(c.ID, nil)
-	b.userMonthStats(b.year, b.month)
+	//b.userMonthStats(b.year, b.month)
 }
 
 func (b *bot) startUser(userName string, msgDate int) stateFn {
@@ -348,9 +358,12 @@ func (b *bot) userAllStats() {
 		log.Println(err)
 		return
 	}
-	msg := fmt.Sprintf("Общая сумма трат за все время: %v рублей\n", all)
+	msg := fmt.Sprintf("``` Общая сумма трат за все время: %v рублей```\n", all)
 
-	message, err := b.SendMessage(msg, b.chatID, nil)
+	opt := echotron.MessageOptions{
+		ParseMode: markdownV2,
+	}
+	message, err := b.SendMessage(msg, b.chatID, &opt)
 	if err != nil {
 		log.Println(message, err)
 	}
