@@ -156,38 +156,6 @@ func (d *Db) GetUsers() ([]Users, error) {
 	return all, nil
 }
 
-func (d *Db) GetUserInfo(userId int64) (Users, int, error) {
-	var (
-		user  Users
-		count int
-	)
-	qUser := `SELECT * FROM users WHERE userID = ?`
-	qCount := `SELECT count(data) FROM data WHERE user_id = ?`
-
-	rows, err := d.db.Query(qUser, userId)
-	if err != nil {
-		return Users{}, 0, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		if err := rows.Scan(&user.UserId, &user.UserName, &user.RegDate); err != nil {
-			return Users{}, 0, err
-		}
-	}
-
-	rows, err = d.db.Query(qCount, userId)
-	if err != nil {
-		return Users{}, 0, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		if err := rows.Scan(&count); err != nil {
-			return Users{}, 0, err
-		}
-	}
-	return user, count, nil
-}
-
 func (d *Db) DeleteAllUserData(userId int64) error {
 	q := `DELETE FROM data WHERE user_id=?`
 	_, err := d.db.Exec(q, userId)

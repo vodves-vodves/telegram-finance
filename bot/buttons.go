@@ -71,6 +71,7 @@ func adminMainButtons() echotron.ReplyKeyboardMarkup {
 			},
 			{
 				{Text: "Админ"},
+				{Text: "Пользователи"},
 			},
 			{
 				{Text: "⚙️ Настройки"},

@@ -128,6 +128,8 @@ func (b *bot) handleMessage(update *echotron.Update) stateFn {
 			b.userMonthStats(b.middleId, time.Now().Year(), time.Now().Month())
 		case strings.HasSuffix(msgText, "Потрачено за все время A"):
 			b.userAllStats(b.middleId)
+		case strings.HasSuffix(msgText, "Пользователи"):
+			b.allUsers()
 		}
 	}
 
@@ -408,6 +410,27 @@ func (b *bot) userAllStats(userId int64) {
 		return
 	}
 	msg := fmt.Sprintf("``` Общая сумма трат за все время: %v рублей```\n", all)
+
+	opt := echotron.MessageOptions{
+		ParseMode: markdownV2,
+	}
+	message, err := b.SendMessage(msg, b.chatID, &opt)
+	if err != nil {
+		log.Println(message, err)
+	}
+}
+
+func (b *bot) allUsers() {
+	all, err := b.db.GetUsers()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	msg := "``` Пользователи: \n"
+	for i, data := range all {
+		msg += fmt.Sprintf("%v\\. %s | %v | %v \n", i+1, time.Unix(int64(data.RegDate), 0).Local().Format("02/01/2006"), data.UserId, data.UserName)
+	}
+	msg += "```"
 
 	opt := echotron.MessageOptions{
 		ParseMode: markdownV2,
