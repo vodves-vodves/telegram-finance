@@ -12,7 +12,7 @@ func mainButtons() echotron.ReplyKeyboardMarkup {
 		Keyboard: [][]echotron.KeyboardButton{
 			{
 				{Text: "📄 Отчеты"},
-				{Text: "💰 Долги"}, //credit
+				//{Text: "💰 Долги"}, //credit
 			},
 			{
 				{Text: "⚙️ Настройки"},
@@ -53,6 +53,47 @@ func creditButtons() echotron.ReplyKeyboardMarkup {
 			{
 				{Text: "💰 Я должен"},
 				{Text: "💰 Мне должны"},
+			},
+			{
+				{Text: "⬅️ Главное меню"},
+			},
+		},
+		ResizeKeyboard: true,
+	}
+}
+
+func adminMainButtons() echotron.ReplyKeyboardMarkup {
+	return echotron.ReplyKeyboardMarkup{
+		Keyboard: [][]echotron.KeyboardButton{
+			{
+				{Text: "📄 Отчеты"},
+				//{Text: "💰 Долги"}, //credit
+			},
+			{
+				{Text: "Админ"},
+			},
+			{
+				{Text: "⚙️ Настройки"},
+			},
+		},
+		ResizeKeyboard: true,
+	}
+}
+
+func adminReportButtons() echotron.ReplyKeyboardMarkup {
+	return echotron.ReplyKeyboardMarkup{
+		Keyboard: [][]echotron.KeyboardButton{
+			{
+				{Text: "💰 Написать расход"},
+				{Text: "💰 Потрачено за все время A"},
+			},
+			{
+				{Text: "💰 Расходы за текущий месяц A"},
+				{Text: "💰 Расходы по категориям A"},
+			},
+			{
+				{Text: "💰 Расходы за опр. месяц A"},
+				{Text: "💰 Расходы по категориям за опр. месяц A"},
 			},
 			{
 				{Text: "⬅️ Главное меню"},
