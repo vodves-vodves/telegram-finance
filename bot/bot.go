@@ -49,10 +49,12 @@ func NewBot(chatID int64) echotron.Bot {
 		log.Println(err)
 	}
 	bot := &bot{
-		chatID:  chatID,
-		adminId: adminId,
-		db:      *db,
-		API:     echotron.NewAPI(token),
+		chatID:   chatID,
+		adminId:  adminId,
+		middleId: chatID,
+		db:       *db,
+
+		API: echotron.NewAPI(token),
 	}
 	bot.state = bot.startBot
 	return bot
@@ -78,7 +80,11 @@ func (b *bot) handleMessage(update *echotron.Update) stateFn {
 	msgText := update.Message.Text
 	userName := update.Message.From.Username
 	msgDate := update.Message.Date
-	log.Printf("[%s] %s", userName, msgText)
+	if userName == "" {
+		log.Printf("[%s %s] %s", update.Message.From.FirstName, update.Message.From.LastName, msgText)
+	} else {
+		log.Printf("[%s] %s", userName, msgText)
+	}
 
 	switch {
 	case msgText == "/start":
@@ -233,7 +239,7 @@ func (b *bot) startUser(userName string, msgDate int) stateFn {
 func (b *bot) mainMenu() {
 
 	msg := "Отправь число для начала учета твоих финансов"
-
+	b.middleId = b.chatID
 	var opt echotron.MessageOptions
 	if b.chatID == b.adminId {
 		opt = echotron.MessageOptions{
