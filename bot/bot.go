@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NicoNex/echotron/v3"
 	"telegram-finance/sql"
+
+	"github.com/NicoNex/echotron/v3"
 )
 
 const (
@@ -352,7 +353,7 @@ func (b *bot) userMonthStats(userId int64, year int, month time.Month) {
 		return
 	}
 	if len(all) > 0 {
-		msg += fmt.Sprintf("``` Траты за %s\n\n", time.Now().Month().String())
+		msg += fmt.Sprintf("``` Траты за %s\n\n", month.String())
 		for i, data := range all {
 			msg += fmt.Sprintf("%v\\. %s | %s | %v руб | %s\n", i+1, data.Date.Local().Format("02/01/2006"), data.Category, data.Data, data.Comment)
 			sum += data.Data
@@ -383,7 +384,7 @@ func (b *bot) userMonthStatsCategory(userId int64, year int, month time.Month) {
 		return
 	}
 	if len(all) > 0 {
-		msg += fmt.Sprintf("``` Траты за %s по категориям\n\n", time.Now().Month().String())
+		msg += fmt.Sprintf("``` Траты за %s по категориям\n\n", month.String())
 		for _, data := range all {
 			categories[data.Category] += data.Data
 		}
@@ -413,9 +414,14 @@ func (b *bot) userAllStats(userId int64) {
 	all, err := b.db.AllSum(userId)
 	if err != nil {
 		log.Println(err)
-		return
+		//return
 	}
-	msg := fmt.Sprintf("``` Общая сумма трат за все время: %v рублей```\n", all)
+	var msg string
+	if all == 0 {
+		msg = "``` У вас нет трат```\n"
+	} else {
+		msg = fmt.Sprintf("``` Общая сумма трат за все время: %v рублей```\n", all)
+	}
 
 	opt := echotron.MessageOptions{
 		ParseMode: markdownV2,
